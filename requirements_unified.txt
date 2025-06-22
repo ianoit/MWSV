@@ -1,0 +1,9 @@
+requests>=2.25.0
+beautifulsoup4>=4.9.0
+lxml>=4.6.0
+colorama>=0.4.4
+urllib3>=1.26.0
+dnspython>=2.1.0
+python-nmap>=0.7.1
+pyyaml>=5.4.0
+reportlab>=3.6.0 
