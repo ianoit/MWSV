@@ -5,13 +5,31 @@ import urllib.parse
 import re
 from urllib.parse import urljoin
 from datetime import datetime
+import time
+
+class RateLimitedSession(requests.Session):
+    def __init__(self, delay=0.2):
+        super().__init__()
+        self.delay = delay
+        self._last_request_time = None
+
+    def request(self, *args, **kwargs):
+        now = time.time()
+        if self._last_request_time is not None:
+            elapsed = now - self._last_request_time
+            if elapsed < self.delay:
+                time.sleep(self.delay - elapsed)
+        response = super().request(*args, **kwargs)
+        self._last_request_time = time.time()
+        return response
 
 class Scanner:
-    def __init__(self, target_url, timeout=30, generate_pdf=False):
+    def __init__(self, target_url, timeout=30, generate_pdf=False, delay=0.2):
         self.target_url = target_url.rstrip('/')
         self.timeout = timeout
         self.generate_pdf = generate_pdf
-        self.session = requests.Session()
+        self.delay = delay
+        self.session = RateLimitedSession(delay=delay)
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
@@ -65,9 +83,14 @@ class Scanner:
             from reportlab.lib import colors
             from reportlab.lib.enums import TA_CENTER, TA_LEFT
             
-            # Create PDF filename
+            # Create reports directory if it doesn't exist
+            reports_dir = 'reports'
+            if not os.path.exists(reports_dir):
+                os.makedirs(reports_dir)
+            
+            # Create PDF filename in reports directory
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            pdf_filename = f"vulnerability_scan_report_{timestamp}.pdf"
+            pdf_filename = os.path.join(reports_dir, f"vulnerability_scan_report_{timestamp}.pdf")
             
             # Create PDF document
             doc = SimpleDocTemplate(pdf_filename, pagesize=A4)
@@ -228,13 +251,14 @@ if __name__ == "__main__":
     parser.add_argument('--timeout', type=int, default=30, help='Timeout request (default: 30)')
     parser.add_argument('-r', '--report', action='store_true', help='Generate report PDF')
     parser.add_argument('-p', '--plugin', type=str, help='Jalankan plugin tertentu saja (pisahkan dengan koma, contoh: xss,sqli,csrf)')
+    parser.add_argument('-d', '--delay', type=float, default=0.2, help='Delay (detik) antar request ke target (default: 0.2)')
     args = parser.parse_args()
     
     selected_plugins = None
     if args.plugin:
         selected_plugins = [p.strip().lower() for p in args.plugin.split(',') if p.strip()]
     
-    scanner = Scanner(target_url=args.target, timeout=args.timeout, generate_pdf=args.report)
+    scanner = Scanner(target_url=args.target, timeout=args.timeout, generate_pdf=args.report, delay=args.delay)
     scanner.run_plugins(selected_plugins=selected_plugins)
     
     print("\n[SUMMARY] Kerentanan yang ditemukan:")
